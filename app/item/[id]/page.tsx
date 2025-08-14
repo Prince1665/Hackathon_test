@@ -23,12 +23,15 @@ type Item = {
   disposition?: "Recyclable" | "Reusable" | "Hazardous" | null
 }
 
+type ItemEvent = { id: string; type: string; at: string; actor_role?: string | null; actor_id?: string | null; data?: any }
+
 export default function ItemDetailsPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const [item, setItem] = useState<Item | null>(null)
   const [loading, setLoading] = useState(true)
   const [disposition, setDisposition] = useState<Item["disposition"] | null>(null)
+  const [events, setEvents] = useState<ItemEvent[]>([])
 
   async function load() {
     setLoading(true)
@@ -37,6 +40,10 @@ export default function ItemDetailsPage() {
       const data = (await res.json()) as Item
       setItem(data)
       setDisposition((data as any).disposition ?? null)
+      try {
+        const ev = await fetch(`/api/items/${params.id}/events`)
+        if (ev.ok) setEvents(await ev.json())
+      } catch {}
     } else {
       setItem(null)
     }
@@ -113,6 +120,20 @@ export default function ItemDetailsPage() {
               <div className="text-xs text-muted-foreground break-all">
                 QR URL: <a className="underline" href={item.qr_code_url} target="_blank" rel="noopener noreferrer">{item.qr_code_url}</a>
               </div>
+              {events.length ? (
+                <div className="rounded border p-3">
+                  <div className="text-sm font-medium mb-2">History</div>
+                  <ul className="text-xs space-y-1">
+                    {events.map((e) => (
+                      <li key={e.id} className="text-muted-foreground flex items-center gap-2">
+                        <span>{new Date(e.at).toLocaleString()}</span>
+                        <span>·</span>
+                        <span>{e.type}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div>
                 <Button variant="ghost" onClick={() => router.back()}>Back</Button>
               </div>

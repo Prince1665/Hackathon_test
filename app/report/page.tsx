@@ -83,6 +83,17 @@ export default function ReportPage() {
     setQrDataUrl(dataUrl)
   }
 
+  function printQR() {
+    if (!qrDataUrl || !created) return
+    const w = window.open("", "_blank")
+    if (!w) return
+    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>QR - ${created.name}</title><style>body{font-family:sans-serif;padding:16px} .meta{margin-bottom:8px}</style></head><body><div class="meta"><div><strong>${created.name}</strong></div><div>${created.category} · Dept #${created.department_id}</div></div><img src="${qrDataUrl}" style="border:1px solid #ccc;padding:8px;background:#fff;"/></body></html>`
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    w.print()
+  }
+
   return (
     <main>
       <AppNav />
@@ -149,7 +160,10 @@ export default function ReportPage() {
                   {qrDataUrl ? (
                     <>
                       <img src={qrDataUrl || "/placeholder.svg"} alt="QR code for item" className="border rounded p-2 bg-white" />
-                      <a href={qrDataUrl} download={`ewaste-${created.id}.png`} className="text-sm underline">Download QR</a>
+                      <div className="flex gap-3">
+                        <a href={qrDataUrl} download={`ewaste-${created.id}.png`} className="text-sm underline">Download PNG</a>
+                        <button type="button" className="text-sm underline" onClick={printQR}>Print</button>
+                      </div>
                     </>
                   ) : (
                     <div className="text-sm text-muted-foreground">Generating QR...</div>

@@ -7,7 +7,7 @@ export type ItemStatus = "Reported" | "Awaiting Pickup" | "Scheduled" | "Collect
 export type Disposition = "Recyclable" | "Reusable" | "Hazardous" | null
 
 export type Department = { id: number; name: string; location: string }
-export type Vendor = { id: string; company_name: string; contact_person: string; email: string; cpcb_registration_no: string }
+export type Vendor = { id: string; company_name: string; contact_person: string; email: string; cpcb_registration_no: string; availability?: string[] }
 export type EwasteItem = {
   id: string
   name: string
@@ -24,10 +24,43 @@ export type EwasteItem = {
 export type Pickup = { id: string; vendor_id: string; admin_id: string; scheduled_date: string; status: "Scheduled" | "Completed" }
 export type Campaign = { id: string; title: string; date: string; description?: string }
 
+export type ItemEvent = {
+  id: string
+  item_id: string
+  type: string
+  at: string
+  actor_role?: Role | null
+  actor_id?: string | null
+  data?: any
+}
+
+export type Notification = {
+  id: string
+  target: "vendor" | "department"
+  vendor_id?: string
+  department_id?: number
+  message: string
+  at: string
+  read?: boolean
+}
+
 function mapId<T extends Record<string, any>>(doc: any, extra?: Partial<T>): T {
   if (!doc) return doc
   const { _id, ...rest } = doc
   return { id: String(_id), ...(rest as any), ...(extra || {}) }
+}
+
+// Simple rules-based disposition classifier
+function classifyDisposition(input: { name: string; description?: string; category: ItemCategory }): Disposition {
+  const desc = (input.description || "").toLowerCase()
+  if (input.category === "Battery") return "Hazardous"
+  if (/(leak|acid|damag|broken|crack|smok|bulg)/.test(desc)) return "Hazardous"
+  if (input.category === "Monitor") return "Recyclable"
+  if (input.category === "Laptop") {
+    if (/(working|good|functional|refurb)/.test(desc)) return "Reusable"
+    return "Recyclable"
+  }
+  return "Recyclable"
 }
 
 // Departments
@@ -40,8 +73,8 @@ export async function listDepartments(): Promise<Department[]> {
 // Vendors
 export async function listVendors(): Promise<Vendor[]> {
   const db = await getDb()
-  const rows = await db.collection("vendors").find({}).project({ _id: 1, company_name: 1, contact_person: 1, email: 1, cpcb_registration_no: 1 }).toArray()
-  return rows.map((v: any) => ({ id: String(v._id), company_name: v.company_name, contact_person: v.contact_person, email: v.email, cpcb_registration_no: v.cpcb_registration_no }))
+  const rows = await db.collection("vendors").find({}).project({ _id: 1, company_name: 1, contact_person: 1, email: 1, cpcb_registration_no: 1, availability: 1 }).toArray()
+  return rows.map((v: any) => ({ id: String(v._id), company_name: v.company_name, contact_person: v.contact_person, email: v.email, cpcb_registration_no: v.cpcb_registration_no, availability: Array.isArray(v.availability) ? v.availability : undefined }))
 }
 
 // Items
@@ -50,6 +83,7 @@ export async function createItem(input: { name: string; description?: string; ca
   const id = randomUUID()
   const now = new Date().toISOString()
   const qrUrl = `${input.origin}/item/${id}`
+  const disposition = classifyDisposition({ name: input.name, description: input.description, category: input.category })
   const doc = {
     _id: id,
     name: input.name,
@@ -60,10 +94,11 @@ export async function createItem(input: { name: string; description?: string; ca
     reported_by: input.reported_by,
     reported_date: now,
     disposed_date: null,
-    disposition: null as Disposition,
+    disposition,
     qr_code_url: qrUrl,
   }
   await db.collection("items").insertOne(doc)
+  await logItemEvent(id, { type: "created", data: { category: doc.category, department_id: doc.department_id } })
   return mapId<EwasteItem>(doc)
 }
 
@@ -90,6 +125,40 @@ export async function updateItem(id: string, changes: Partial<Pick<EwasteItem, "
   return d ? mapId<EwasteItem>(d) : null
 }
 
+export async function logItemEvent(item_id: string, event: { type: string; actor_role?: Role; actor_id?: string; data?: any }): Promise<ItemEvent> {
+  const db = await getDb()
+  const id = randomUUID()
+  const at = new Date().toISOString()
+  const rec = { _id: id, item_id, type: event.type, at, actor_role: event.actor_role || null, actor_id: event.actor_id || null, data: event.data || null }
+  await db.collection("item_events").insertOne(rec)
+  return { id, item_id, type: event.type, at, actor_role: event.actor_role || null, actor_id: event.actor_id || null, data: event.data || null }
+}
+
+export async function listItemEvents(item_id: string): Promise<ItemEvent[]> {
+  const db = await getDb()
+  const rows = await db.collection("item_events").find({ item_id }).sort({ at: -1 }).toArray()
+  return rows.map((r: any) => ({ id: String(r._id), item_id: r.item_id, type: r.type, at: r.at, actor_role: r.actor_role || null, actor_id: r.actor_id || null, data: r.data || null }))
+}
+
+export async function createNotification(input: { target: "vendor" | "department"; vendor_id?: string; department_id?: number; message: string }): Promise<Notification> {
+  const db = await getDb()
+  const id = randomUUID()
+  const at = new Date().toISOString()
+  const rec = { _id: id, target: input.target, vendor_id: input.vendor_id, department_id: input.department_id, message: input.message, at, read: false }
+  await db.collection("notifications").insertOne(rec)
+  return { id, target: input.target, vendor_id: input.vendor_id, department_id: input.department_id, message: input.message, at, read: false }
+}
+
+export async function listNotifications(filter: { target?: "vendor" | "department"; vendor_id?: string; department_id?: number } = {}): Promise<Notification[]> {
+  const db = await getDb()
+  const q: any = {}
+  if (filter.target) q.target = filter.target
+  if (filter.vendor_id) q.vendor_id = filter.vendor_id
+  if (typeof filter.department_id === "number") q.department_id = filter.department_id
+  const rows = await db.collection("notifications").find(q).sort({ at: -1 }).toArray()
+  return rows.map((r: any) => ({ id: String(r._id), target: r.target, vendor_id: r.vendor_id, department_id: r.department_id, message: r.message, at: r.at, read: r.read }))
+}
+
 // Pickups
 export async function schedulePickup(input: { admin_id: string; vendor_id: string; scheduled_date: string; item_ids: string[] }): Promise<Pickup> {
   const db = await getDb()
@@ -100,6 +169,12 @@ export async function schedulePickup(input: { admin_id: string; vendor_id: strin
     const ops = input.item_ids.map((item_id) => ({ _id: randomUUID(), pickup_id: id, item_id }))
     if (ops.length) await db.collection("pickup_items").insertMany(ops)
     await db.collection("items").updateMany({ _id: { $in: input.item_ids } }, { $set: { status: "Scheduled" } })
+    const items = await db.collection("items").find({ _id: { $in: input.item_ids } }).project({ _id: 1, department_id: 1 }).toArray()
+    for (const it of items) {
+      await logItemEvent(String(it._id), { type: "scheduled", actor_role: "admin", actor_id: input.admin_id, data: { vendor_id: input.vendor_id, scheduled_date: input.scheduled_date } })
+      await createNotification({ target: "department", department_id: typeof it.department_id === "number" ? it.department_id : Number(it.department_id), message: `Pickup scheduled on ${input.scheduled_date} for item ${String(it._id)}` })
+    }
+    await createNotification({ target: "vendor", vendor_id: input.vendor_id, message: `Pickup scheduled: ${input.item_ids.length} item(s) on ${input.scheduled_date}` })
   }
   return pick
 }

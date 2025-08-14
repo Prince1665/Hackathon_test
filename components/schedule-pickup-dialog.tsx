@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { useEffect } from "react"
 
 type Item = { id: string; name: string }
-type Vendor = { id: string; company_name: string }
+type Vendor = { id: string; company_name: string; availability?: string[] }
 
 export function SchedulePickupDialog({
   items,
@@ -75,7 +75,9 @@ export function SchedulePickupDialog({
               <SelectTrigger><SelectValue placeholder="Select a vendor" /></SelectTrigger>
               <SelectContent>
                 {vendors.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.company_name}</SelectItem>
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.company_name}{Array.isArray(v.availability) && v.availability.length ? ` — ${v.availability.join(', ')}` : ''}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

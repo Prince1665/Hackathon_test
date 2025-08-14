@@ -17,10 +17,13 @@ type Item = {
   category: string
 }
 
+type ItemEvent = { id: string; type: string; at: string; actor_role?: string | null; actor_id?: string | null; data?: any }
+
 export default function VendorScanPage() {
   const [cameraReady, setCameraReady] = useState(false)
   const [result, setResult] = useState<string>("")
   const [item, setItem] = useState<Item | null>(null)
+  const [events, setEvents] = useState<ItemEvent[]>([])
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment")
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const codeReaderRef = useRef<any>(null)
@@ -55,6 +58,7 @@ export default function VendorScanPage() {
 
   async function startScan() {
     setItem(null)
+    setEvents([])
     setResult("")
     setCameraReady(true)
     try {
@@ -142,6 +146,20 @@ export default function VendorScanPage() {
     }
   }
 
+  async function loadEvents(itemId: string) {
+    try {
+      const r = await fetch(`/api/items/${itemId}/events`)
+      if (r.ok) setEvents(await r.json())
+    } catch {}
+  }
+
+  async function logScan(itemId: string, payload: any) {
+    try {
+      await fetch(`/api/items/${itemId}/events`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "scanned", data: payload }) })
+      await loadEvents(itemId)
+    } catch {}
+  }
+
   async function handleDecoded(text: string) {
     // Expect URL like https://host/item/{id}
     try {
@@ -152,6 +170,7 @@ export default function VendorScanPage() {
       if (res.ok) {
         const data = await res.json()
         setItem(data)
+        await logScan(id, { via: "qr_url" })
       } else {
         setItem(null)
         alert("Item not found")
@@ -160,7 +179,10 @@ export default function VendorScanPage() {
       // Maybe direct ID
       const id = text.trim()
       const res = await fetch(`/api/items/${id}`)
-      if (res.ok) setItem(await res.json())
+      if (res.ok) {
+        setItem(await res.json())
+        await logScan(id, { via: "manual_id" })
+      }
     }
   }
 
@@ -170,6 +192,7 @@ export default function VendorScanPage() {
     if (res.ok) {
       const updated = await res.json()
       setItem(updated)
+      await logScan(updated.id, { action: "confirm_collection" })
     } else {
       alert("Failed to update status")
     }
@@ -225,6 +248,20 @@ export default function VendorScanPage() {
                 <div className="mt-3">
                   <Button onClick={confirmCollection} disabled={item.status === "Collected"}>Confirm Collection</Button>
                 </div>
+                {events.length ? (
+                  <div className="mt-4">
+                    <div className="text-sm font-medium">Recent activity</div>
+                    <ul className="mt-2 text-xs space-y-1">
+                      {events.slice(0, 5).map((e) => (
+                        <li key={e.id} className="text-muted-foreground flex items-center gap-2">
+                          <span>{new Date(e.at).toLocaleString()}</span>
+                          <span>·</span>
+                          <span>{e.type}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </CardContent>
