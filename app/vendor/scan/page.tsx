@@ -50,6 +50,7 @@ export default function VendorScanPage() {
     }
     if (v) v.srcObject = null
     streamRef.current = null
+    try { codeReaderRef.current?.stopContinuousDecode?.() } catch {}
   }
 
   async function startScan() {
@@ -63,7 +64,7 @@ export default function VendorScanPage() {
       const v = videoRef.current
       if (v) v.srcObject = stream
 
-      // pick the first available camera device
+      // Ensure reader exists
       if (!codeReaderRef.current) {
         try {
           codeReaderRef.current = new BrowserQRCodeReader()
@@ -71,10 +72,6 @@ export default function VendorScanPage() {
           throw new Error("QR Code reader not available")
         }
       }
-      
-      const reader = codeReaderRef.current
-      // Get available video input devices for potential future use
-      await reader.constructor.listVideoInputDevices()
     } catch (e: any) {
       if (e?.name === "NotAllowedError") {
         alert("Camera permission denied. Please allow camera access to scan QR codes.")
@@ -87,32 +84,45 @@ export default function VendorScanPage() {
 
   async function scanQRCode() {
     if (!cameraReady || !videoRef.current || !codeReaderRef.current) return
-    
+
+    const reader = codeReaderRef.current
+    const video = videoRef.current
+
     try {
-      // Capture the current frame and decode
-      const reader = codeReaderRef.current
-      
-      // Check if the reader is ready and has the necessary methods
-      if (typeof reader.decodeFromVideoElement !== 'function') {
-        throw new Error("QR code reader not fully initialized")
-      }
-      
-      const result = await reader.decodeFromVideoElement(videoRef.current)
-      
-      // Handle different result formats
-      let text = ''
-      if (result) {
-        text = typeof result.getText === "function" ? result.getText() : 
-              (typeof result.text === "string" ? result.text : 
-              (typeof result === "string" ? result : JSON.stringify(result)))
-      }
-      
-      if (!text) {
-        throw new Error("Could not extract text from QR code")
-      }
-      
-      setResult(text)
-      await handleDecoded(text)
+      await new Promise<void>((resolve, reject) => {
+        const onResult = async (res: any, err: any, controls?: { stop: () => void }) => {
+          if (res) {
+            try {
+              let text = ''
+              if (typeof res.getText === "function") text = res.getText()
+              else if (typeof res.text === "string") text = res.text
+              else if (typeof res === "string") text = res
+              else text = JSON.stringify(res)
+
+              setResult(text)
+              await handleDecoded(text)
+              resolve()
+            } catch (innerErr) {
+              reject(innerErr)
+            } finally {
+              try { controls?.stop?.() } catch {}
+              try { reader.stopContinuousDecode?.() } catch {}
+            }
+          } else if (err && err.name && err.name !== "NotFoundException") {
+            try { controls?.stop?.() } catch {}
+            try { reader.stopContinuousDecode?.() } catch {}
+            reject(err)
+          }
+        }
+
+        if (typeof reader.decodeFromVideoElement === 'function') {
+          reader.decodeFromVideoElement(video, onResult)
+        } else if (typeof reader.decodeFromVideoDevice === 'function') {
+          reader.decodeFromVideoDevice(undefined, video, onResult)
+        } else {
+          reject(new Error("QR code reader not fully initialized"))
+        }
+      })
     } catch (e: any) {
       if (e?.name !== "NotFoundException") {
         console.error("QR Scan error:", e)
@@ -185,22 +195,21 @@ export default function VendorScanPage() {
             <div className="grid gap-3">
               <div className="relative rounded border overflow-hidden bg-black/80 aspect-video">
                 <video ref={videoRef} className="w-full h-full object-cover" muted autoPlay playsInline />
-                <div className="absolute inset-0 flex items-center justify-center gap-3">
-                  {!cameraReady ? (
-                    <>
-                      <Button onClick={startScan}>Start Camera</Button>
-                      <Button variant="outline" onClick={stopCamera}>Stop</Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button onClick={scanQRCode}>Scan QR</Button>
-                      <Button variant="outline" onClick={toggleCamera}>
-                        Switch Camera ({facingMode === "environment" ? "Back" : "Front"})
-                      </Button>
-                      <Button variant="outline" onClick={stopCamera}>Stop</Button>
-                    </>
-                  )}
-                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {!cameraReady ? (
+                  <>
+                    <Button onClick={startScan}>Start Camera</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button onClick={scanQRCode}>Scan QR</Button>
+                    <Button variant="outline" onClick={toggleCamera}>
+                      Switch Camera ({facingMode === "environment" ? "Back" : "Front"})
+                    </Button>
+                    <Button variant="outline" onClick={stopCamera}>Stop</Button>
+                  </>
+                )}
               </div>
               <div className="text-xs text-muted-foreground">Note: Allow camera access when prompted. Use the Scan QR button to capture the current frame.</div>
             </div>
