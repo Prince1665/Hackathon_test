@@ -1,4 +1,4 @@
-import crypto from "node:crypto"
+const crypto = require("node:crypto")
 import { cookies } from "next/headers"
 import { getSessionById, getUserByEmail, getUserById } from "./auth-mongo"
 

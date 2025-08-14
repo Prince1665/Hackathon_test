@@ -1,5 +1,5 @@
 import { getDb } from "./mongo"
-import bcrypt from "bcryptjs"
+const bcrypt = require("bcryptjs")
 import { randomUUID } from "crypto"
 import { ObjectId } from "mongodb"
 
@@ -29,17 +29,17 @@ export async function createSession(user: any, days = 30) {
   const id = randomUUID()
   const now = new Date()
   const expiresAt = new Date(now.getTime() + days * 864e5)
-  await db.collection("sessions").insertOne({ _id: id, userId: user._id, role: user.role || "student", createdAt: now, expiresAt })
+  await db.collection("sessions").insertOne({ _id: id as any, userId: user._id, role: user.role || "student", createdAt: now, expiresAt })
   return { id, user: { user_id: String(user._id), role: user.role || "student", email: user.email } }
 }
 
 export async function getSessionById(id: string) {
   const db = await getDb()
-  return db.collection("sessions").findOne<{ _id: string; userId: any; role: string; createdAt: Date; expiresAt: Date }>({ _id: id })
+  return db.collection("sessions").findOne<{ _id: string; userId: any; role: string; createdAt: Date; expiresAt: Date }>({ _id: id as any })
 }
 
 export async function deleteSession(id: string) {
   const db = await getDb()
-  await db.collection("sessions").deleteOne({ _id: id })
+  await db.collection("sessions").deleteOne({ _id: id as any })
 }
 

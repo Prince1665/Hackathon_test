@@ -63,7 +63,7 @@ export async function createItem(input: { name: string; description?: string; ca
     disposition: (input.disposition ?? null) as Disposition,
     qr_code_url: qrUrl,
   }
-  await db.collection("items").insertOne(doc)
+  await db.collection("items").insertOne(doc as any)
   return mapId<EwasteItem>(doc)
 }
 
@@ -80,14 +80,14 @@ export async function listItems(filter?: { status?: ItemStatus; department_id?: 
 
 export async function getItem(id: string): Promise<EwasteItem | null> {
   const db = await getDb()
-  const d = await db.collection("items").findOne({ _id: id })
+  const d = await db.collection("items").findOne({ _id: id as any })
   return d ? mapId<EwasteItem>(d) : null
 }
 
 export async function updateItem(id: string, changes: Partial<Pick<EwasteItem, "status" | "description" | "category" | "disposed_date" | "disposition">>): Promise<EwasteItem | null> {
   const db = await getDb()
-  await db.collection("items").updateOne({ _id: id }, { $set: changes })
-  const d = await db.collection("items").findOne({ _id: id })
+  await db.collection("items").updateOne({ _id: id as any }, { $set: changes })
+  const d = await db.collection("items").findOne({ _id: id as any })
   return d ? mapId<EwasteItem>(d) : null
 }
 
@@ -96,11 +96,11 @@ export async function schedulePickup(input: { admin_id: string; vendor_id: strin
   const db = await getDb()
   const id = randomUUID()
   const pick: Pickup = { id, admin_id: input.admin_id, vendor_id: input.vendor_id, scheduled_date: input.scheduled_date, status: "Scheduled" }
-  await db.collection("pickups").insertOne({ _id: id, ...pick })
+  await db.collection("pickups").insertOne({ _id: id as any, ...pick })
   if (input.item_ids?.length) {
-    const ops = input.item_ids.map((item_id) => ({ _id: randomUUID(), pickup_id: id, item_id }))
-    if (ops.length) await db.collection("pickup_items").insertMany(ops)
-    await db.collection("items").updateMany({ _id: { $in: input.item_ids } }, { $set: { status: "Scheduled" } })
+    const ops = input.item_ids.map((item_id) => ({ _id: randomUUID() as any, pickup_id: id, item_id }))
+    if (ops.length) await db.collection("pickup_items").insertMany(ops as any)
+    await db.collection("items").updateMany({ _id: { $in: input.item_ids as any } }, { $set: { status: "Scheduled" } })
   }
   return pick
 }
@@ -132,7 +132,7 @@ export async function createCampaign(input: { title: string; date: string; descr
   const db = await getDb()
   const id = randomUUID()
   const doc = { _id: id, title: input.title, date: input.date, description: input.description || null }
-  await db.collection("campaigns").insertOne(doc)
+  await db.collection("campaigns").insertOne(doc as any)
   return mapId<Campaign>(doc)
 }
 
