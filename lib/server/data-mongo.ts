@@ -146,6 +146,11 @@ export async function createNotification(input: { target: "vendor" | "department
   const at = new Date().toISOString()
   const rec = { _id: id, target: input.target, vendor_id: input.vendor_id, department_id: input.department_id, message: input.message, at, read: false }
   await db.collection("notifications").insertOne(rec)
+  // Trigger external integrations (stubbed)
+  try {
+    const { sendNotificationViaIntegrations } = await import("./notify")
+    await sendNotificationViaIntegrations({ target: input.target, vendor_id: input.vendor_id, department_id: input.department_id, message: input.message })
+  } catch {}
   return { id, target: input.target, vendor_id: input.vendor_id, department_id: input.department_id, message: input.message, at, read: false }
 }
 
