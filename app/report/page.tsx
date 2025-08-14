@@ -37,6 +37,25 @@ export default function ReportPage() {
     fetch("/api/departments").then(async (r) => setDepartments(await r.json()))
   }, [])
 
+  const preferredDeptNames = [
+    "CSE",
+    "CSE(AI&ML)",
+    "IT",
+    "IOT",
+    "MECH",
+    "CIVIL",
+    "AEIE",
+    "CSE(DS)",
+  ]
+
+  const mergedDepartments = useMemo(() => {
+    const existingNames = new Set(departments.map((d) => d.name.toLowerCase()))
+    const staticDepts: Department[] = preferredDeptNames
+      .filter((n) => !existingNames.has(n.toLowerCase()))
+      .map((name, idx) => ({ id: 1000 + idx + 1, name, location: "" }))
+    return [...departments, ...staticDepts]
+  }, [departments])
+
   const canSubmit = useMemo(() => {
     return form.name && form.category && form.department_id && form.reported_by
   }, [form])
@@ -101,7 +120,7 @@ export default function ReportPage() {
                   <Select value={form.department_id} onValueChange={(v) => setForm((f) => ({ ...f, department_id: v }))}>
                     <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                     <SelectContent>
-                      {departments.map((d) => (
+                      {mergedDepartments.map((d) => (
                         <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
                       ))}
                     </SelectContent>
