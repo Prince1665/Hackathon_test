@@ -41,12 +41,44 @@ async function main() {
     console.log("Connecting to MongoDB ...")
     await client.connect()
     const db = client.db(dbName)
-    console.log(`Connected. DB=\"${dbName}\"`)
+    console.log(`Connected. DB="${dbName}"`)
 
     // Ensure unique index on email
     try {
       await db.collection("users").createIndex({ email: 1 }, { unique: true })
     } catch {}
+
+    // Seed Departments (idempotent by name)
+    try {
+      const deptNames = [
+        "CSE",
+        "CSE(AI&ML)",
+        "IT",
+        "IOT",
+        "MECH",
+        "CIVIL",
+        "AEIE",
+        "CSE(DS)",
+      ]
+      const deptCol = db.collection("departments")
+      const existing = await deptCol.find({}).project({ _id: 1, name: 1 }).toArray()
+      const existingNames = new Set(existing.map((d) => String(d.name || "").toLowerCase()))
+      let nextId = existing.reduce((max, d) => (typeof d._id === "number" && d._id > max ? d._id : max), 0)
+      let createdDepts = 0
+      let skippedDepts = 0
+      for (const name of deptNames) {
+        if (existingNames.has(name.toLowerCase())) {
+          skippedDepts++
+          continue
+        }
+        nextId += 1
+        await deptCol.insertOne({ _id: nextId, name, location: "" })
+        createdDepts++
+      }
+      console.log(`Departments: created=${createdDepts}, skipped=${skippedDepts}`)
+    } catch (e) {
+      console.warn("Department seed step failed:", e)
+    }
 
     const users = [
       { name: "Admin User", email: "admin@example.com", password: "admin123", role: "admin", department_id: 0 },
