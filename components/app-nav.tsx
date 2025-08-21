@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Dialog,
   DialogContent,
@@ -47,30 +48,18 @@ export function AppNav({ className }: { className?: string }) {
 
   return (
     <header className={cn("w-full border-b bg-background", className)}>
-      <div className="container flex h-14 items-center justify-between gap-4">
-        <div className="flex items-center gap-6">
-          <a onClick={() => go("/")} className="font-semibold cursor-pointer">
-            SMART E WASTE MANAGEMENT SYSTEM
-          </a>
-          <nav className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
-            <a className="hover:text-foreground cursor-pointer" onClick={() => go("/report")}>
-              Report item
-            </a>
-            <a className="hover:text-foreground cursor-pointer" onClick={() => go("/admin")}>
-              Admin
-            </a>
-            <a className="hover:text-foreground cursor-pointer" onClick={() => go("/vendor/scan")}>
-              Vendor scan
-            </a>
-          </nav>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="container flex h-14 items-center justify-center gap-4 relative">
+        <a onClick={() => go("/")} className="font-semibold cursor-pointer">
+          SMART E WASTE MANAGEMENT SYSTEM
+        </a>
+        <div className="absolute right-0 flex items-center gap-2">
+          <ThemeToggle />
           {role ? (
             <Button size="sm" variant="ghost" onClick={onLogout}>
               Logout
             </Button>
           ) : (
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="bg-[#ff6b35] hover:bg-[#e55a2b] text-white">
               <a href="/login">Login</a>
             </Button>
           )}
